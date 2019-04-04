@@ -63,7 +63,7 @@ LONG_USR_INTR	EQU	0	; 0 user interrupts execute fast.
 ;  定义硬件中断触发时需要进行的操作
 HW_TIMER_CODE	MACRO
 				; 默认用户自定义代码段为空操作
-		RETI
+		RETI ; 中断返回指令，从中断子程序返回主程序
 		ENDM
 ;
 ;
@@ -250,7 +250,7 @@ PUBLIC	?RTX_TASKSTATUS
 TimerVal:	DS	1	; Task Timer (Software Timer for each task) 预留一个字节，临时存储每个任务计时器的值
 TaskState:	DS	1       ; Task Status (state of each Task) 预留一个字节，临时存储每个任务的状态值
 
-; Definitions for Bits in Task State
+; Definitions for Bits in Task State 任务状态各位的含义
 ;  TaskState.0  = Wait for Signal 等待信号
 ;  TaskState.1  = Wait for TimeOut 等待超时
 ;  TaskState.2  = Signal Flag 信号标志
@@ -260,19 +260,19 @@ TaskState:	DS	1       ; Task Status (state of each Task) 预留一个字节，�
 ;  TaskState.6  = Round Robin Time Out 时间片超时
 ;  TaskState.7  = Run Flag 正在运行标志
 
-; byte mask definitions
-K_SIG	        EQU	1 
-K_TMO	        EQU	2
-SIG_EVENT	EQU	4 
-TMO_EVENT	EQU	8
-K_READY		EQU	16
-K_ACTIVE	EQU	32
-K_ROBIN		EQU	64
-K_IVL           EQU     128  ; not a task state bit; only used in os_wait
-RDY_EVENT       EQU     128  ; READY status flag
-K_RDY           EQU     128
+; byte mask definitions 字节掩码定义
+K_SIG	        EQU	1 ; 等待一个信号
+K_TMO	        EQU	2 ; 等待一个超时信号，只有时间到了，才会产生一个信号。它产生的信号不累计，产生信号后，任务进入就绪状态
+SIG_EVENT	EQU	4  ; 收到一个信号标志
+TMO_EVENT	EQU	8  ; 收到一个超时信号标志
+K_READY		EQU	16 ; 任务就绪
+K_ACTIVE	EQU	32 ; 任务激活
+K_ROBIN		EQU	64 ; 任务切换
+K_IVL           EQU     128  ; 产生周期信号，产生的信号可以累积
+RDY_EVENT       EQU     128  ; 就绪状态标志
+K_RDY           EQU     128  ; 
 
-; bit position definitions
+; bit position definitions 位位置定义
 B_WAITSIG	EQU	0
 B_WAITTIM	EQU	1
 B_SIGNAL	EQU	2
@@ -284,43 +284,43 @@ B_IVL           EQU     7    ; not a task state bit; only used in os_wait
 B_RDY           EQU     7
 
 
-IF (TIMESHARING OR CPU_IDLE_CODE)
+IF (TIMESHARING OR CPU_IDLE_CODE) ; 如果启用了时间片轮转或定义了CPU空闲状态代码
 ?RTX?BITS	SEGMENT	BIT
 		RSEG	?RTX?BITS
 ENDIF
 
 IF (TIMESHARING)
-?RTX_TS_DELAY:	DBIT	1       ; Status bit set when task switch in progress
+?RTX_TS_DELAY:	DBIT	1       ; 任务切换进行时设置的状态位
 ENDIF
 
 IF (CPU_IDLE_CODE)
-?RTX_ISR_SIG:	DBIT	1	; Status bit set when interrupt or os_set_signal
+?RTX_ISR_SIG:	DBIT	1	; 中断或设置信号时的状态位设置
 ENDIF
 
 
-		CSEG	AT	0BH
-                JMP	TIMERINT
+		CSEG	AT	0BH ; 跳转到定时器0溢出中断入口处
+                JMP	TIMERINT 
 
 ?RTX?CODE       SEGMENT CODE
                 RSEG	?RTX?CODE
-		USING	0		; Registerbank 0 for following code
+		USING	0		; 下述代码使用工作寄存器组0
 
-IF (FREE_STACK <> 0)
+IF (FREE_STACK <> 0) ; 如果栈中没有空闲空间，则
 ?RTX_STACKERROR:
-                STACK_ERROR             ; User defined Stack Error Code
+                STACK_ERROR             ; 用户自定义堆栈溢出处理函数
 ENDIF
 
-HW_TIMER:	HW_TIMER_CODE
+HW_TIMER:	HW_TIMER_CODE ; 用户自定义中断触发后的处理程序
 
 TIMERINT:
 
-IF (LONG_USR_INTR)
+IF (LONG_USR_INTR) ; 如果指定允许长用户中断服务程序
 		PUSH	ACC
 		MOV	A,PSW
 		ANL	A,#018H
 		XRL	A,#?RTX_REGISTERBANK
 		JNZ	CONT_TIMINT
-; avoid recursive timer interrupt
+; 避免触发定时器中断
 		POP	ACC
 		RETI		; Return from Recursive Timer Interrupt
 CONT_TIMINT:    POP	ACC
@@ -673,22 +673,22 @@ ENDIF
 EXTRN CODE (?C_STARTUP)
 PUBLIC	main
 
-main:		MOV	R0,#?RTX?TASKSP?S 
-		MOV	@R0,SP 
-		MOV	A,#?RTX_MAXTASKN 
-		JZ	main2 
-		MOV	R7,A 
-main1:		INC	R0  
-		MOV	@R0,#RAMTOP            
-		DJNZ	R7,main1
-main2:		MOV	R7,#?RTX_MAXTASKN+1 
-		CLR	A
-		MOV	R0,#?RTX?TASKSTATE?S
-main1x:		MOV	@R0,A
-		INC	R0
-		MOV	@R0,A
-		INC	R0
-		DJNZ	R7,main1x
+main:		MOV	R0,#?RTX?TASKSP?S ; 初始化任务堆栈指针表
+		MOV	@R0,SP ; R0->?RTX?TASKSP: |_SP(81H)_|
+		MOV	A,#?RTX_MAXTASKN ; ACC=?RTX_MAXTASKN 最大任务数                   
+		JZ	main2 ; if(ACC==0) { goto main2(); } ---------------------------.
+		MOV	R7,A ; R7=?RTX_MAXTASKN                                         |
+main1:		INC	R0  ; R0->?RTX?TASKSP+1  <-------------------------------.  |
+		MOV	@R0,#RAMTOP ; R0->?RTX?TASKSP+1: |_RAMTOP(0FFH)_|            |  |
+		DJNZ	R7,main1 ; if((R7=?RTX_MAXTASKN-1)!=0) { goto main1(); }-.  |                                        |
+main2:		MOV	R7,#?RTX_MAXTASKN+1 ; <-------------------------------------.
+		CLR	A ; ACC=0
+		MOV	R0,#?RTX?TASKSTATE?S ; 初始化任务状态表
+main1x:		MOV	@R0,A ; R0->?RTX?TASKSTATE: |_0_| TASK0.TimerVal=0  <-------.
+		INC	R0 ;      R0->?RTX?TASKSTATE+1: |_0_| TASK0.TaskState=0         |
+		MOV	@R0,A ;   ....                                                  |
+		INC	R0 ;                                                            |
+		DJNZ	R7,main1x ; ------------------------------------------------.
 		MOV	R0,#?RTX?TASKSTATE?S+1
 		MOV	@R0,#K_ACTIVE+K_READY
 		MOV	DPTR,#?RTX?TASKENT?S
@@ -698,8 +698,8 @@ main1x:		MOV	@R0,A
 		CLR	A
 		MOVC	A,@A+DPTR
 		PUSH	ACC
-IF (TIMESHARING <> 0)
-		MOV	?RTX_ROBINTIME,#TIMESHARING
+IF (TIMESHARING <> 0) ; 如果启用了时间片轮转
+		MOV	?RTX_ROBINTIME,#TIMESHARING ; 则令?RTX_ROBINTIME=TIMESHARING
 ENDIF
 		ORL	TMOD,#01H	; 初始化TMOD，将TMOD最低位置，使用定时器0工作方式1（16位计数器)，每个机器周期当计数满65536后溢出
 		MOV	TL0,#LOW (?RTX_CLOCK) ; 指定计数初值低八位，TL0=(?RTX_CLOCK)%256 = FFFF D8F0

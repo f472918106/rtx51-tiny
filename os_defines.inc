@@ -7,7 +7,7 @@
 ;
 ;------------------------------------------------------------------------------
 
-EXTRN	NUMBER (?RTX_MAXTASKN)		; 最大任务数
+EXTRN	NUMBER (?RTX_MAXTASKN)		    ; 最大任务数
 EXTRN   NUMBER (?RTX_RAMTOP)            ; 堆栈顶部地址
 EXTRN   DATA   (?RTX_CURRENTTASK)       ; 当前正在运行的任务号
 EXTRN   CODE   (os_switch_task)         ; 执行任务切换
