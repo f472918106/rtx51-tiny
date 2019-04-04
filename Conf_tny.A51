@@ -153,8 +153,8 @@ PSW     DATA    0D0H ; 程序状态字
 ACC     DATA    0E0H ; 累加器，通常也写作A
 B       DATA    0F0H ; B寄存器
 SP      DATA    81H ; 堆栈指针
-DPL     DATA    82H ; 数据地址指针（低8位）
-DPH     DATA    83H ; 数据地址指针（高8位）
+DPL     DATA    82H ; 数据地址指针（低8位）---\ DPTR 
+DPH     DATA    83H ; 数据地址指针（高8位）---/
 TCON    DATA    88H ; 定时器/计数器控制寄存器
 TMOD    DATA    89H ; 定时器/计数器方式控制寄存器
 TL0     DATA    8AH ; 定时器0初值（低8位）
@@ -689,13 +689,13 @@ main1x:		MOV	@R0,A ; R0->?RTX?TASKSTATE: |_0_| TASK0.TimerVal=0  <-------.
 		MOV	@R0,A ;   ....                                                  |
 		INC	R0 ;                                                            |
 		DJNZ	R7,main1x ; ------------------------------------------------.
-		MOV	R0,#?RTX?TASKSTATE?S+1
-		MOV	@R0,#K_ACTIVE+K_READY
-		MOV	DPTR,#?RTX?TASKENT?S
-		MOV	A,#1
-		MOVC	A,@A+DPTR
+		MOV	R0,#?RTX?TASKSTATE?S+1 ; R0->TASK0.TaskState
+		MOV	@R0,#K_ACTIVE+K_READY ; R0->Task0.TaskState |_0x30_| 将任务0状态置为激活+就绪
+		MOV	DPTR,#?RTX?TASKENT?S ; DPTR->?RTX?TASKENT 基址
+		MOV	A,#1 ; ACC=1 偏移量
+		MOVC	A,@A+DPTR ; ACC=#?RTX?TASKENT:0x01 将Task0入口地址入栈
 		PUSH	ACC
-		CLR	A
+		CLR	A 
 		MOVC	A,@A+DPTR
 		PUSH	ACC
 IF (TIMESHARING <> 0) ; 如果启用了时间片轮转
