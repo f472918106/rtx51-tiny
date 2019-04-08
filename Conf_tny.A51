@@ -70,6 +70,7 @@ HW_TIMER_CODE	MACRO
 ;------------------------------------------------------------------------------
 ;
 ;  CODE BANKING SUPPORT
+;  代码分页支持
 ;  ====================
 ;
 ;  The following EQU statement controls the code banking support for RTX51 TINY.
@@ -82,6 +83,7 @@ CODE_BANKING     EQU     0      ; 0 (default) application uses no code banking
 ;------------------------------------------------------------------------------
 ;
 ;  RTX-51 TINY Stack Space
+;  RTX-51 Tiny 堆栈空间
 ;  =======================
 ;
 ;  The following EQU statements defines the size of the internal RAM used
@@ -102,7 +104,7 @@ RAMTOP		EQU	0FFH	; RAM顶部地址为0xFFH，除非您的IDATA变量位于堆栈
 ;                             --> 堆栈与数据缓冲区(30H-7FH)，寻址时只可以采用字节寻址
 ;                -> 高128单元 --> 特殊寄存器SFR区域，寻址时采用直接寻址
 ;
-; CSEG 代码段 0000H-FFFFH
+; CSEG 代码段 0000H-FFFFH 需使用DPTR寄存器，用基址加偏移量的方式进行寻址
 ; DSEG 内部RAM 00H-7FH(直接寻址)
 ; BSEG 位寻址段
 ; ISEG 内部RAM 00H-FFH(间接寻址)
@@ -298,8 +300,8 @@ IF (CPU_IDLE_CODE)
 ENDIF
 
 
-		CSEG	AT	0BH ; 跳转到定时器0溢出中断入口处
-                JMP	TIMERINT 
+		CSEG	AT	0BH ; 定位到定时器0中断处理程序入口地址
+                JMP	TIMERINT ; 跳转到TIMEINT段
 
 ?RTX?CODE       SEGMENT CODE
                 RSEG	?RTX?CODE
@@ -307,22 +309,22 @@ ENDIF
 
 IF (FREE_STACK <> 0) ; 如果栈中没有空闲空间，则
 ?RTX_STACKERROR:
-                STACK_ERROR             ; 用户自定义堆栈溢出处理函数
+                STACK_ERROR             ; 调用用户自定义堆栈溢出处理
 ENDIF
 
 HW_TIMER:	HW_TIMER_CODE ; 用户自定义中断触发后的处理程序
 
-TIMERINT:
+TIMERINT: 
 
-IF (LONG_USR_INTR) ; 如果指定允许长用户中断服务程序
-		PUSH	ACC
-		MOV	A,PSW
-		ANL	A,#018H
-		XRL	A,#?RTX_REGISTERBANK
-		JNZ	CONT_TIMINT
+IF (LONG_USR_INTR) ; 如果指定允许长用户中断服务程序  判断当前用户是否使用了寄存器组1只有RS1RS0=01时不会实现跳转
+		PUSH	ACC ; 保存累加器当前状态
+		MOV	A,PSW ; 
+		ANL	A,#018H ; 逻辑与运算
+		XRL	A,#?RTX_REGISTERBANK ; 逻辑异或运算
+		JNZ	CONT_TIMINT ; 上一步操作结果不为0，则跳转到CONT_TIMINT
 ; 避免触发定时器中断
 		POP	ACC
-		RETI		; Return from Recursive Timer Interrupt
+		RETI		; 从定时器0中断返回
 CONT_TIMINT:    POP	ACC
 
 ENDIF
@@ -693,7 +695,7 @@ main1x:		MOV	@R0,A ; R0->?RTX?TASKSTATE: |_0_| TASK0.TimerVal=0  <-------.
 		MOV	@R0,#K_ACTIVE+K_READY ; R0->Task0.TaskState |_0x30_| 将任务0状态置为激活+就绪
 		MOV	DPTR,#?RTX?TASKENT?S ; DPTR->?RTX?TASKENT 基址
 		MOV	A,#1 ; ACC=1 偏移量
-		MOVC	A,@A+DPTR ; ACC=#?RTX?TASKENT:0x01 将Task0入口地址入栈
+		MOVC	A,@A+DPTR ; 将Task0入口地址入栈 注意DPTR为一个16位寄存器，分为DPL和DPH
 		PUSH	ACC
 		CLR	A 
 		MOVC	A,@A+DPTR
