@@ -18,7 +18,7 @@ PUBLIC	_os_create_task
 
 ?RTX?CODE	SEGMENT	CODE
 		RSEG	?RTX?CODE
-		USING	0		; Registerbank 0 for following code
+		USING	0		; 下述代码使用工作寄存器组0
 
 
 ;  uchar os_create_task (uchar no)  {
@@ -29,28 +29,28 @@ PUBLIC	_os_create_task
 ;---- Variable 'no'  assigned to Register 'R7' ----
 ;---- Variable 'i'   assigned to Register 'R6' ----
 ;
-; Returns 0xFF if the task number is too large
-;         0xFF if the task is already active
-;         0x00 if the task was inserted into the task list
+; Returns 当任务号过大时（超过最大任务数）则返回0xFF
+;         如果任务已经处于激活状态则返回0xFF
+;         当任务已经插入到任务列表中则返回0x00
 ;
 ;
 ;    if (no > MAXTASKN)  return (0xff);
 _os_create_task:
-		MOV     A,R7
-		SETB    C
-		SUBB    A,#?RTX_MAXTASKN
-		JC      ?C0010
+		MOV     A,R7 ; 将要创建的任务号读取到A寄存器中
+		SETB    C ; 将Cy置1，主要用于下一步减法操作时的借位操作
+		SUBB    A,#?RTX_MAXTASKN ; 减法操作，如果不够减需要借位时，则Cy=1，并且如果是在第三位发生了借位，则AC=1
+		JC      ?C0010 ; Jump if C=1 如果上述操作，即当任务号小于最大任务数时跳转到?C0010，否则跳转到?C0012_
 ?C0012_:	MOV     R7,#0FFH
-		RET     
+		RET ; 返回之前的程序体中 弹栈两字节赋给PC实现指令的跳转   
 ?C0010:
 ;    if (STATE[no].st & K_ACTIVE)  return (0xff);
 		MOV	A,#?RTX?TASKSTATE?S+1
 		ADD	A,R7
-		ADD	A,R7
-		MOV     R0,A
-		MOV     A,@R0
-		JB      ACC.B_ACTIVE,?C0012_
-
+		ADD	A,R7 
+		MOV     R0,A ; 
+		MOV     A,@R0 ; A=TASK[n].TaskState
+		JB      ACC.B_ACTIVE,?C0012_ ; JB 当操作数的值为1时跳转到?C0012_ 即如果Task[n].TaskState[5]=K_ACTIVE则跳转到?C0012_
+;  
 ;    STATE[no].st |= K_ACTIVE + K_READY;
 		CLR	EA
 		MOV	A,@R0

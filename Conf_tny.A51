@@ -695,11 +695,11 @@ main1x:		MOV	@R0,A ; R0->?RTX?TASKSTATE: |_0_| TASK0.TimerVal=0  <-------.
 		MOV	@R0,#K_ACTIVE+K_READY ; R0->Task0.TaskState |_0x30_| 将任务0状态置为激活+就绪
 		MOV	DPTR,#?RTX?TASKENT?S ; DPTR->?RTX?TASKENT 基址
 		MOV	A,#1 ; ACC=1 偏移量
-		MOVC	A,@A+DPTR ; 将Task0入口地址入栈 注意DPTR为一个16位寄存器，分为DPL和DPH
-		PUSH	ACC
-		CLR	A 
-		MOVC	A,@A+DPTR
-		PUSH	ACC
+		MOVC	A,@A+DPTR ; 取到Task0入口地址低八位
+		PUSH	ACC ; 将Task0入口地址低八位入栈
+		CLR	A ; 将A寄存器清空
+		MOVC	A,@A+DPTR ; 取到Task0入口地址高八位
+		PUSH	ACC ; 将Task0入口地址高八位入栈
 IF (TIMESHARING <> 0) ; 如果启用了时间片轮转
 		MOV	?RTX_ROBINTIME,#TIMESHARING ; 则令?RTX_ROBINTIME=TIMESHARING
 ENDIF
@@ -709,7 +709,7 @@ ENDIF
 		SETB	TR0 ; TR0置1，启动T0
 		SETB	EA ; EA置1，开总中断
 		SETB	ET0 ; ET0置1，开T0中断
-		RET		; 开始执行 _task_ 0
+		RET		; 开始执行 _task_ 0 RET的实际操作是从栈中弹出两个字节数据，然后分别装到PC的高八位和低八位，以便跳转到Task0
 ; 如果使用12MHz晶振，则机器周期=12/12MHz=1us，定时器0溢出所需要的时间为10000*1us=10ms
 ; 定时器每个一个机器周期计数初值加1
 ;------------------------------------------------

@@ -106,7 +106,7 @@ EXTRN DATA (?C_PBP)
                 MOV     ?C_PBP,#LOW PBPSTACKTOP
 ENDIF
 
-                MOV     SP,#?STACK-1
+                MOV     SP,#?STACK-1 ; SP=#?STACK-1
                 LJMP    ?C_START ; 把程序执行的权利交给指定入口函数,即main()
 
                 END
