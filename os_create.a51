@@ -34,7 +34,7 @@ PUBLIC	_os_create_task
 ;         当任务已经插入到任务列表中则返回0x00
 ;
 ;
-;    if (no > MAXTASKN)  return (0xff);
+;    if (no > MAXTASKN)  return (0xff); 如果要创建的任务号大于MAXTASKN，则返回0xFF
 _os_create_task:
 		MOV     A,R7 ; 将要创建的任务号读取到A寄存器中
 		SETB    C ; 将Cy置1，主要用于下一步减法操作时的借位操作
@@ -43,7 +43,7 @@ _os_create_task:
 ?C0012_:	MOV     R7,#0FFH
 		RET ; 返回之前的程序体中 弹栈两字节赋给PC实现指令的跳转   
 ?C0010:
-;    if (STATE[no].st & K_ACTIVE)  return (0xff);
+;    if (STATE[no].st & K_ACTIVE)  return (0xff); 如果要创建的任务已处于激活状态，则返回0xFF
 		MOV	A,#?RTX?TASKSTATE?S+1
 		ADD	A,R7
 		ADD	A,R7 
@@ -51,40 +51,40 @@ _os_create_task:
 		MOV     A,@R0 ; A=TASK[n].TaskState
 		JB      ACC.B_ACTIVE,?C0012_ ; JB 当操作数的值为1时跳转到?C0012_ 即如果Task[n].TaskState[5]=K_ACTIVE则跳转到?C0012_
 ;  
-;    STATE[no].st |= K_ACTIVE + K_READY;
-		CLR	EA
+;    STATE[no].st |= K_ACTIVE + K_READY; 将当前任务状态置为激活+就绪
+		CLR	EA ; 关总中断
 		MOV	A,@R0
-		ORL	A,#K_ACTIVE+K_READY
+		ORL	A,#K_ACTIVE+K_READY 
 		MOV     @R0,A
-		SETB	EA
+		SETB	EA ; 开总中断
 ;
 ;    i = current;
-		MOV	R6,?RTX_CURRENTTASK
+		MOV	R6,?RTX_CURRENTTASK ; 取到当前正在运行的任务号 
 
 ?C0013_:
-;    while (i < no)  {
+;    while (i < no)  { 如果正在运行的任务号比要创建的任务号小
 		MOV     A,R6
 		CLR	C
 		SUBB    A,R7
-		JNC     ?C0014
-;      i++;
+		JNC     ?C0014 ; 当i>=no时跳转到?C0014
+;      i++; 
 		INC	R6
 
-;      p1 = STKP[i];
+;      p1 = STKP[i]; 使p1指向任务i的堆栈指针
 		MOV     A,#?RTX?TASKSP?S
 		ADD     A,R6
 		MOV     R0,A
 		MOV     A,@R0
 		MOV     R1,A
 
-;      p2 = i == MAXTASKN ? RAMTOP : STKP[i+1];
+;      p2 = i == MAXTASKN ? RAMTOP : STKP[i+1]; 判断取到的任务号是否等于最大任务数，如果等于则p2指向栈底0xFF，否则指向当前位置的下一个地址
 		INC	R0
 		MOV	A,@R0
 		DEC	R0
-		CJNE    R6,#?RTX_MAXTASKN,?C0015_
+		CJNE    R6,#?RTX_MAXTASKN,?C0015_ ; 如果取到的任务号等于最大任务数，则直接跳转到?C0015_
 		MOV	A,#?RTX_RAMTOP
 ?C0015_:
-		MOV	R5,A
+		MOV	R5,A 
 
 ?C0017:
                 MOV     A,R5
