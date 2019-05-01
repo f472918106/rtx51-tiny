@@ -176,7 +176,7 @@ EXTRN	NUMBER (?RTX_MAXTASKN)		; max Task Number
 saveacc		  EQU	R2    ; for access in interrupt service routine
 ?RTX_SAVEPSW:     DS	1
 savepsw		  EQU	R3    ; for access in interrupt service routine
-?RTX_CURRENTTASK: DS	1
+?RTX_CURRENTTASK: DS	1 ; 预留一字节,当前任务号为八位二进制一字节
 currenttask       EQU	R4    ; for access in interrupt service routine
 
 IF (TIMESHARING <> 0)

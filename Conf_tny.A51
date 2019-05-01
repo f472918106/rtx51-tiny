@@ -434,7 +434,7 @@ ENDIF
 ENDIF
 
 ;------------------------------------------------
-; Perform a Task-Switch
+; Perform a Task-Switch 执行一次任务切换
 ;  void os_switch_task (void)
 ;      uchar i;
 ;      uchar limit;
@@ -448,39 +448,39 @@ ENDIF
 
 os_switch_task:
 
-IF (CODE_BANKING <> 0)
-		PUSH	?B_CURRENTBANK
+IF (CODE_BANKING <> 0)	; 如果配置为代码分页
+		PUSH	?B_CURRENTBANK ; 则将当前代码页地址入栈
 ENDIF
 
 os_switch_task1:
 
 ;      next = current;
-IF (TIMESHARING <> 0)
-		SETB	?RTX_TS_DELAY		; Delay Task Switching
+IF (TIMESHARING <> 0) ; 如果默认时间片超时时间不为0
+		SETB	?RTX_TS_DELAY		; 则等待任务切换
 ENDIF
-		MOV	A,?RTX_CURRENTTASK
-		MOV	R7,A
-;      while (1)  {
-		RL	A
-		ADD	A,#?RTX?TASKSTATE?S+1
+		MOV	A,?RTX_CURRENTTASK ; ACC=CurrentTask 
+		MOV	R7,A ; R7存储当前任务号
+;      while (1)  {					
+		RL	A ; 循环移位,死循环
+		ADD	A,#?RTX?TASKSTATE?S+1 ; 使A指向任务状态表中任务n的TaskState位（任务状态位)
 		MOV	R0,A
 ?C0001:
-;        if (++next == MAXTASKN+1)  next = 0;
-		INC     R7
-		INC	R0
-		INC	R0
-IF (CPU_IDLE_CODE)
-		MOV	A,R7
-		CJNE	A,?RTX_CURRENTTASK,NoIDLE
-		JBC	?RTX_ISR_SIG,NoIDLE
-		CPU_IDLE          ; CPU sleep
-NoIDLE:
+;        if (++next == MAXTASKN+1)  next = 0; 当下一任务号大于最大任务数+1后，下一任务号重新指向0
+		INC     R7 ; 
+		INC	R0  
+		INC	R0 
+IF (CPU_IDLE_CODE) ; 判断是否启用了CPU空闲状态用户代码,如果有的话
+		MOV	A,R7 
+		CJNE	A,?RTX_CURRENTTASK,NoIDLE ; 当下一任务号和当前任务号不相等时，则空转
+		JBC	?RTX_ISR_SIG,NoIDLE ; 判断是否接收到信号，没有则继续空转
+		CPU_IDLE          ; CPU sleep 空转时置CPU为空闲状态
+NoIDLE: ; 空转
 ENDIF
-		CJNE    R7,#?RTX_MAXTASKN+1,?C0003
-		MOV	R7,#0
-		MOV	R0,#?RTX?TASKSTATE?S+1
+		CJNE    R7,#?RTX_MAXTASKN+1,?C0003 ; 当下一任务号没有超过最大任务数加1时，则跳转到?C0003
+		MOV	R7,#0 ; 否则将下一任务号置0
+		MOV	R0,#?RTX?TASKSTATE?S+1 ; 重新把任务0的TaskState传给R0
 ?C0003:
-;        if (STATE[next].st & K_READY)  break;
+;        if (STATE[next].st & K_READY)  break; 如果下一个任务为就绪状态，才跳出死循环
 		MOV     A,@R0
 		JNB     ACC.B_READY,?C0001
 ;      }
