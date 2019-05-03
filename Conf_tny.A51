@@ -36,7 +36,7 @@ INT_REGBANK	EQU	1	; 指定用于定时器中断的寄存器组，默认使用寄
 ;  Define Hardware-Timer tick time in 8051 machine cycles.
 INT_CLOCK	EQU	10000	; 指定硬件定时器0滴答间隔为10000个机器周期
 ;
-;  如果使用11.5092MHz晶振，则一个机器周期为 12/11.0592 us
+;  如果使用11.5092MHz晶振，则一个机器周期为 12/11.0592=1.08 us 
 ;  如果使用12MHz晶振，则一个机器周期为 1 us
 ; 
 ;  Define Round-Robin Timeout in Hardware-Timer ticks.
@@ -334,17 +334,17 @@ ENDIF
 		MOV	?RTX_SAVEPSW,PSW
 		MOV	PSW,#?RTX_REGISTERBANK
 		MOV	saveacc,ACC     ; ACC required by some Cygnal devices
-; Update 8051 Interrupt Timer
-		CLR	TR0
-		MOV	A,TL0
-		ADD	A,#LOW (?RTX_CLOCK + 7)
+; Update 8051 Interrupt Timer ; 更新定时器0计数值
+		CLR	TR0 ; 关定时器0中断
+		MOV	A,TL0 
+		ADD	A,#LOW (?RTX_CLOCK + 7) ; TL0 = FFFF 0007
 		MOV	TL0,A
 		MOV	A,TH0
-		ADDC	A,#HIGH (?RTX_CLOCK + 7)
+		ADDC	A,#HIGH (?RTX_CLOCK + 7) ; TH0 = FFFF FFFF
 		MOV	TH0,A
-		SETB	TR0
+		SETB	TR0 ; 开定时器0中断,定时器0每隔
 
-IF (FREE_STACK <> 0)
+IF (FREE_STACK <> 0)	; 堆栈检查					
 ; Check if enough free stack is available
 		MOV	A,currenttask
 		ADD	A,#?RTX?TASKSP?S+1
@@ -358,25 +358,25 @@ checkstack:	CLR	C
 		JC	?RTX_STACKERROR
 ENDIF
 
-; Update & Check Task Timers
-		MOV	R1,#?RTX_MAXTASKN+1
-		MOV	R0,#?RTX?TASKSTATE?S
+; Update & Check Task Timers 依次更新并检查每个任务的定时器计数状态TimerVal,如果没有超时则重新置为就绪状态
+		MOV	R1,#?RTX_MAXTASKN+1 ; #立即数 @取地址
+		MOV	R0,#?RTX?TASKSTATE?S ; 首先使R0指向Task[0].TimerVal
 TIMERLOOP:	DEC	@R0          ; Decrement timer
-		MOV	A,@R0
-		INC	R0           ; advance to TaskState
+		MOV	A,@R0			
+		INC	R0           ; 移位指向Task[n].TaskState位
 		JNZ	NoTimeout
-		CLR	EA
+		CLR	EA	; 关总中断
 		MOV	A,@R0
 		JNB	ACC.B_WAITTIM,NoWaitTimeout
 		ORL	A,#(K_READY+TMO_EVENT)
 		MOV	@R0,A
 NoWaitTimeout:  SETB	EA
-NoTimeout:	INC	R0           ; advance to TaskTimer
+NoTimeout:	INC	R0           ; 任务没有超时的话，定时器计数加1
 		DJNZ	R1,TIMERLOOP
 
 		MOV	A,saveacc
 		MOV	PSW,savepsw
-		USING	0		; Registerbank 0 for following code
+		USING	0		; Registerbank 0 for following code 切换寄存器组0
 
 IF (TIMESHARING == 0)
 ; 当不需要进循环任务切换时，系统中断由此结束
@@ -401,12 +401,12 @@ ENDIF
                 RET	
 CheckRobinTime: DJNZ     ?RTX_ROBINTIME,NoRobinTimeout
 
-?RTX_TASKSWITCHING:
-		PUSH	ACC
-		PUSH	PSW
-		PUSH	B
-		PUSH	DPH
-		PUSH	DPL
+?RTX_TASKSWITCHING: ; 保护现场,将当前任务执行状态入栈
+		PUSH	ACC ; 累加器
+		PUSH	PSW ; 程序状态字
+		PUSH	B   ; B寄存器
+		PUSH	DPH ; DPTR高八位
+		PUSH	DPL ; DPTR低八位 
 		PUSH	AR0
 		PUSH	AR1
 		PUSH	AR2
@@ -492,14 +492,14 @@ PUBLIC  ?RTX_NEXTTASK
 ?RTX_NEXTID	EQU	AR7
 ?RTX_NEXTTASK:	NOP		; for Debugging
 
-;      while (current < next)  {
+;      while (current < next)  { 当前任务号小于下一就绪任务号时
 ?C0005:
 		MOV     A,?RTX_CURRENTTASK
 		CLR     C
 		SUBB    A,R7
 		JNC     ?C0011
 
-;        current++;
+;        current++; 
 		INC	?RTX_CURRENTTASK
 ;        i = STKP[current];
 		MOV     A,#?RTX?TASKSP?S
@@ -639,9 +639,9 @@ ENDIF
 		
 
 ;------------------------------------------------
-IF (TIMESHARING <> 0)
+IF (TIMESHARING <> 0) ; 如果启用了时间片轮转
 RobinOn:	MOV	@R0,A
-		SETB	EA
+		SETB	EA ; 开总中断
 IF (CODE_BANKING)
 		POP	ACC
 		CALL	?B_RESTORE_BANK
